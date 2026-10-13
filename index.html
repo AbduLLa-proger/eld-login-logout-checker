@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="ru">
+
+<head>
+  <meta charset="UTF-8" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <meta name="description"
+    content="Compare FlowConnect driver Login/Logout events by odometer, location, and handoff time." />
+
+  <title>Driver Log Comparator</title>
+</head>
+
+<body>
+  <main class="app-shell">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">
+          FLOWCONNECT TOOL
+        </p>
+
+        <h1>
+          Driver Log Comparator
+        </h1>
+
+        <p class="subtitle">
+          Вставьте HTML двух или трёх водителей.
+          Сайт сам найдёт Login / Logout,
+          восстановит location и сравнит записи
+          по odometer, location и времени передачи.
+        </p>
+      </div>
+
+      <div>
+        <button id="clearAll" class="button button-ghost" type="button">
+          Очистить
+        </button>
+
+        <button id="themeToggle" class="button button-ghost" type="button" aria-label="Переключить тему">
+          🌙
+        </button>
+      </div>
+
+    </header>
+
+    <section id="inputGrid" class="input-grid" aria-label="Driver HTML inputs">
+      <article class="driver-card">
+        <div class="section-title-row">
+          <div>
+            <span class="section-kicker">
+              SECTION 01
+            </span>
+
+            <h2>
+              First Driver
+            </h2>
+          </div>
+
+          <span id="firstMeta" class="meta-pill">
+            HTML не вставлен
+          </span>
+        </div>
+
+        <textarea id="firstHtml" spellcheck="false" placeholder="Вставьте сюда HTML первого водителя..."></textarea>
+      </article>
+
+      <article class="driver-card">
+        <div class="section-title-row">
+          <div>
+            <span class="section-kicker">
+              SECTION 02
+            </span>
+
+            <h2>
+              Second Driver
+            </h2>
+          </div>
+
+          <span id="secondMeta" class="meta-pill">
+            HTML не вставлен
+          </span>
+        </div>
+
+        <textarea id="secondHtml" spellcheck="false" placeholder="Вставьте сюда HTML второго водителя..."></textarea>
+      </article>
+
+      <article id="thirdDriverCard" class="driver-card hidden">
+        <div class="section-title-row">
+          <div>
+            <span class="section-kicker">
+              SECTION 03
+            </span>
+
+            <h2>
+              Third Driver
+            </h2>
+          </div>
+
+          <span id="thirdMeta" class="meta-pill">
+            HTML не вставлен
+          </span>
+        </div>
+
+        <textarea id="thirdHtml" spellcheck="false" placeholder="Вставьте сюда HTML третьего водителя..."></textarea>
+      </article>
+    </section>
+
+    <section class="toolbar" aria-label="Comparison actions">
+      <div class="toolbar-copy">
+        <strong>
+          Сравнение
+        </strong>
+
+        <span>
+          Сортировка: Odometer ↑ · одинаковый
+          odometer сохраняет исходный порядок.
+        </span>
+      </div>
+
+      <div class="toolbar-actions">
+        <button id="toggleThirdDriver" class="button button-ghost" type="button" aria-expanded="false">
+          + Add Third Driver
+        </button>
+
+        <button id="compareButton" class="button button-primary" type="button">
+          Compare Drivers
+        </button>
+      </div>
+    </section>
+
+    <section id="message" class="message hidden" role="status"></section>
+
+    <section id="results" class="results hidden" aria-live="polite">
+      <div class="summary-grid">
+        <article class="summary-card">
+          <span>Matched</span>
+
+          <strong id="matchedCount">
+            0
+          </strong>
+
+          <small>
+            Совпали odometer, event pair,
+            location и порядок времени
+          </small>
+        </article>
+
+        <article class="summary-card">
+          <span>Mismatch</span>
+
+          <strong id="mismatchCount">
+            0
+          </strong>
+
+          <small>
+            Есть расхождение или отсутствует пара
+          </small>
+        </article>
+
+        <article class="summary-card">
+          <span>Ignored</span>
+
+          <strong id="ignoredCount">
+            0
+          </strong>
+
+          <small>
+            8-day boundary или same-driver re-login
+          </small>
+        </article>
+      </div>
+
+      <div class="comparison-card">
+        <div id="comparisonHeader" class="comparison-header comparison-grid-row"></div>
+
+        <div id="comparisonRows"></div>
+      </div>
+
+      <div class="legend">
+        <span>
+          <b class="dot dot-match"></b>
+          Match
+        </span>
+
+        <span>
+          <b class="dot dot-mismatch"></b>
+          Mismatch
+        </span>
+
+        <span>
+          <b class="dot dot-neutral"></b>
+          Не ошибка / не сравниваем
+        </span>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+
+</html>

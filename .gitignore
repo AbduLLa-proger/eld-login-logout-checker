@@ -1,0 +1,12 @@
+node_modules/
+dist/
+
+.env
+.env.local
+.env.*.local
+
+tsconfig.tsbuildinfo
+
+.yarn/
+
+.DS_Store
