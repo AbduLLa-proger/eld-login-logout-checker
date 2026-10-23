@@ -31,15 +31,35 @@ const findRelogIndexes = (group: DriverEvent[]): Set<number> => {
     const current = group[i];
     const next = group[i + 1];
 
+    if (!current || !next) {
+      continue;
+    }
+
+    /*
+     * Один и тот же водитель может иметь:
+     *
+     * Logout -> Login
+     * или
+     * Login -> Logout
+     *
+     * с одинаковым odometer.
+     *
+     * В обоих случаях это допустимо.
+     */
     if (
-      current &&
-      next &&
-      current.type === "logout" &&
-      next.type === "login" &&
-      current.odometer === next.odometer
+      current.odometer != null &&
+      next.odometer != null &&
+      current.odometer === next.odometer &&
+      current.type !== next.type
     ) {
       neutral.add(i);
       neutral.add(i + 1);
+
+      /*
+       * Эти два события уже образуют пару,
+       * поэтому следующее событие начинаем
+       * проверять отдельно.
+       */
       i += 1;
     }
   }
@@ -209,7 +229,7 @@ export const compareDrivers = (drivers: DriverEvent[][]): DriverComparison => {
         reason = "Начало 8-day window";
       } else if (relogIndexes.has(index)) {
         state = "neutral";
-        reason = "Login/Logout одного водителя с тем же odometer";
+        reason = "Login/Logout одного водителя с тем же odometer — допустимо";
       }
 
       output.push({
