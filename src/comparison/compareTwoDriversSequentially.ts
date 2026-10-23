@@ -54,6 +54,17 @@ const createRowEvents = (
   return events;
 };
 
+const hasCoDriverAction = (
+  events: Array<DriverEvent | null>,
+  action: "drop" | "pickup",
+): boolean =>
+  events.some(
+    (event) =>
+      event?.coDriverEvents?.some(
+        (coDriverEvent) => coDriverEvent.action === action,
+      ) ?? false,
+  );
+
 /*
  * Это не означает, что пара полностью правильная.
  *
@@ -325,12 +336,62 @@ export const compareTwoDriversSequentially = (
 
   let order = 0;
 
+  let coDriversSeparated = false;
+
   let firstSharedOdometer: number | null = null;
 
   let hasSeenAlignedPair = false;
 
   let pendingFirstIndexes: number[] = [];
   let pendingSecondIndexes: number[] = [];
+
+  const applyCoDriverState = (
+    events: Array<DriverEvent | null>,
+    state: ComparisonRow["state"],
+    reason: string,
+  ): {
+    state: ComparisonRow["state"];
+    reason: string;
+  } => {
+    const hasPickup = hasCoDriverAction(events, "pickup");
+
+    const hasDrop = hasCoDriverAction(events, "drop");
+
+    /*
+     * Pick Co Driver:
+     * с этой строки водители снова едут вместе.
+     */
+    if (hasPickup) {
+      coDriversSeparated = false;
+    }
+
+    /*
+     * Если Drop уже произошёл раньше,
+     * сравнение двух водителей временно отключаем.
+     */
+    const result = coDriversSeparated
+      ? {
+          state: "neutral" as const,
+          reason: "После Drop Co Driver — водители едут отдельно",
+        }
+      : {
+          state,
+          reason,
+        };
+
+    /*
+     * Drop Co Driver:
+     * сама строка Drop ещё относится
+     * к предыдущей общей цепочке.
+     *
+     * Разделение начинается со следующей строки.
+     */
+    if (hasDrop) {
+      coDriversSeparated = true;
+    }
+
+    return result;
+  };
 
   const pushSingle = (
     driverIndex: 0 | 1,
@@ -355,8 +416,7 @@ export const compareTwoDriversSequentially = (
       reason = "У Login/Logout отсутствует odometer";
     } else if (relogIndexes.has(eventIndex)) {
       state = "neutral";
-      reason =
-        "Same-driver Login/Logout с тем же odometer: чередование допустимо";
+      reason = "Login/Logout одного водителя с тем же odometer — допустимо";
     } else if (isBeginningWindow) {
       /*
        * Самое начало 8-day window.
@@ -368,13 +428,17 @@ export const compareTwoDriversSequentially = (
       reason = "Начало 8-day window";
     }
 
+    const events = createRowEvents(
+      driverIndex === 0 ? event : null,
+      driverIndex === 1 ? event : null,
+    );
+
+    const result = applyCoDriverState(events, state, reason);
+
     rows.push({
-      events: createRowEvents(
-        driverIndex === 0 ? event : null,
-        driverIndex === 1 ? event : null,
-      ),
-      state,
-      reason,
+      events,
+      state: result.state,
+      reason: result.reason,
       odometer: event.odometer ?? Number.POSITIVE_INFINITY,
       order,
     });
@@ -390,15 +454,24 @@ export const compareTwoDriversSequentially = (
       return;
     }
 
-    const result = compareEvents(first, second);
+    const pairResult = compareEvents(first, second);
 
     if (firstSharedOdometer == null && isStructuralPair(first, second)) {
       firstSharedOdometer = first.odometer;
     }
 
+    const events = createRowEvents(first, second);
+
+    const result = applyCoDriverState(
+      events,
+      pairResult.state,
+      pairResult.reason,
+    );
+
     rows.push({
-      events: createRowEvents(first, second),
-      ...result,
+      events,
+      state: result.state,
+      reason: result.reason,
       odometer: getRowOdometer(first, second),
       order,
     });

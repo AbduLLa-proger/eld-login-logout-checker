@@ -519,6 +519,32 @@ textarea:focus {
   color: #667085;
 }
 
+.event-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.event-change-truck,
+.event-drop-co-driver,
+.event-pickup-co-driver {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+
+  padding: 4px 8px;
+  border-radius: 6px;
+
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.event-co-driver-time {
+  opacity: 0.7;
+  font-weight: 500;
+}
+
 /* =========================
    DARK THEME
    ========================= */

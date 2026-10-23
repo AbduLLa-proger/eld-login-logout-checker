@@ -1,6 +1,89 @@
 import type { DriverEvent, ParsedDriverHtml, RawStatus } from "../types";
 import { cleanText, getEventType, parseOdometer } from "../utils/normalize";
 
+type CoDriverAction = "drop" | "pickup" | null;
+
+type CoDriverAttachment = {
+  action: "drop" | "pickup";
+  dateTime: string;
+};
+
+const hasChangeTruckText = (value: string): boolean => {
+  const normalized = cleanText(value);
+
+  return /\bchange[\s-]+(?:truck|truk|truc|trck|track)\b/i.test(normalized);
+};
+
+const getCoDriverAction = (value: string): CoDriverAction => {
+  /*
+   * Сначала проверяем действие ПЕРЕД Co Driver.
+   *
+   * Поддерживает:
+   *
+   * Drop Co Driver
+   * Drop Co-Driver
+   * Drop-Co-Driver
+   * DropCoDriver
+   *
+   * Pick Co Driver
+   * Pick-Co-Driver
+   * PickCoDriver
+   *
+   * Pick Up Co Driver
+   * Pick-Up-Co-Driver
+   * PickupCoDriver
+   */
+  const dropBeforeMatch = /\bdrop[\s-]*co[\s-]*driver\b/i.test(value);
+
+  if (dropBeforeMatch) {
+    return "drop";
+  }
+
+  const pickupBeforeMatch = /\bpick(?:[\s-]*up)?[\s-]*co[\s-]*driver\b/i.test(
+    value,
+  );
+
+  if (pickupBeforeMatch) {
+    return "pickup";
+  }
+
+  /*
+   * Если перед Co Driver действия нет,
+   * ищем сам Co Driver и смотрим ПОСЛЕ него.
+   */
+  const coDriverMatch = /\bco[\s-]*driver\b/i.exec(value);
+
+  if (!coDriverMatch) {
+    return null;
+  }
+
+  const after = value
+    .slice(coDriverMatch.index + coDriverMatch[0].length)
+    .trim();
+
+  /*
+   * Co Driver Drop
+   * Co-Driver, Drop
+   *
+   * Co Driver Pick
+   * Co Driver Pickup
+   * Co Driver Pick Up
+   */
+  const afterMatch = after.match(/^[\s,;:.-]*(drop|pick(?:[\s-]*up)?)\b/i);
+
+  if (!afterMatch) {
+    return null;
+  }
+
+  const action = afterMatch[1]!.toLowerCase();
+
+  if (action === "drop") {
+    return "drop";
+  }
+
+  return "pickup";
+};
+
 const textOf = (element: Element | undefined): string => {
   if (!element) return "";
 
@@ -269,8 +352,16 @@ export const parseDriverHtml = (html: string): ParsedDriverHtml => {
     );
   }
 
-  const statuses: RawStatus[] = rowNodes.map((row, originalIndex) => {
+  const statuses: Array<
+    RawStatus & {
+      hasChangeTruckIcon: boolean;
+    }
+  > = rowNodes.map((row, originalIndex) => {
     const cells = [...row.children];
+
+    const hasChangeTruckIcon = Boolean(
+      row.querySelector('img[src*="truck-fast_black"]'),
+    );
 
     return {
       originalIndex,
@@ -279,8 +370,162 @@ export const parseDriverHtml = (html: string): ParsedDriverHtml => {
       location: getLocation(row, cells),
       odometer: getOdometer(cells),
       notes: getNotes(cells),
+      hasChangeTruckIcon,
     };
   });
+
+  const hasChangeTruck = (
+    status: RawStatus & {
+      hasChangeTruckIcon: boolean;
+    },
+  ): boolean => status.hasChangeTruckIcon || hasChangeTruckText(status.notes);
+
+  const formatCoDriverDateTime = (time: string): string => {
+    const normalized = cleanText(time);
+
+    const match = normalized.match(/^([A-Za-z]{3})\s+(\d{1,2}),\s+(.+)$/);
+
+    if (!match) {
+      return normalized;
+    }
+
+    const [, monthShort, day, timePart] = match;
+
+    const months: Record<string, string> = {
+      Jan: "January",
+      Feb: "February",
+      Mar: "March",
+      Apr: "April",
+      May: "May",
+      Jun: "June",
+      Jul: "July",
+      Aug: "August",
+      Sep: "September",
+      Oct: "October",
+      Nov: "November",
+      Dec: "December",
+    };
+
+    const month = months[monthShort!] ?? monthShort;
+
+    return `${day} ${month}, ${timePart}`;
+  };
+
+  const findPreviousLoginIndex = (index: number): number | null => {
+    for (let i = index - 1; i >= 0; i -= 1) {
+      const status = statuses[i];
+
+      if (!status) {
+        continue;
+      }
+
+      if (getEventType(status.event) === "login") {
+        return i;
+      }
+    }
+
+    return null;
+  };
+
+  const findNextLogoutIndex = (index: number): number | null => {
+    for (let i = index + 1; i < statuses.length; i += 1) {
+      const status = statuses[i];
+
+      if (!status) {
+        continue;
+      }
+
+      if (getEventType(status.event) === "logout") {
+        return i;
+      }
+    }
+
+    return null;
+  };
+
+  const coDriverEventsByAuthIndex = new Map<number, CoDriverAttachment[]>();
+
+  statuses.forEach((status, index) => {
+    const action = getCoDriverAction(status.notes);
+
+    if (!action) {
+      return;
+    }
+
+    /*
+     * DROP CO DRIVER:
+     * прикрепляем к Login, который был ДО него.
+     *
+     * PICK CO DRIVER:
+     * прикрепляем к Logout, который идёт ПОСЛЕ него.
+     */
+    const authIndex =
+      action === "drop"
+        ? findPreviousLoginIndex(index)
+        : findNextLogoutIndex(index);
+
+    if (authIndex === null) {
+      return;
+    }
+
+    const existingEvents = coDriverEventsByAuthIndex.get(authIndex) ?? [];
+
+    existingEvents.push({
+      action,
+      dateTime: formatCoDriverDateTime(status.time),
+    });
+
+    coDriverEventsByAuthIndex.set(authIndex, existingEvents);
+  });
+
+  const hasNearbyChangeTruck = (
+    index: number,
+    type: DriverEvent["type"],
+    odometer: number | null,
+  ): boolean => {
+    if (odometer == null) {
+      return false;
+    }
+
+    const currentStatus = statuses[index];
+
+    if (!currentStatus) {
+      return false;
+    }
+
+    // change truck прямо на Login / Logout
+    if (
+      currentStatus.odometer === odometer &&
+      hasChangeTruckText(currentStatus.notes)
+    ) {
+      return true;
+    }
+
+    // Login -> ищем после
+    // Logout -> ищем перед
+    const direction = type === "login" ? 1 : -1;
+
+    const MAX_DISTANCE = 3;
+
+    for (let distance = 1; distance <= MAX_DISTANCE; distance += 1) {
+      const status = statuses[index + direction * distance];
+
+      if (!status) {
+        break;
+      }
+
+      // Другой Login / Logout = уже другая группа
+      if (getEventType(status.event)) {
+        break;
+      }
+
+      if (status.odometer === odometer && hasChangeTruckText(status.notes)) {
+        return true;
+      }
+    }
+
+    return false;
+  };
 
   const findLocationBefore = (index: number): string => {
     for (let i = index - 1; i >= 0; i -= 1) {
@@ -314,6 +559,8 @@ export const parseDriverHtml = (html: string): ParsedDriverHtml => {
         return null;
       }
 
+      const coDriverEvents = coDriverEventsByAuthIndex.get(index) ?? [];
+
       /*
        * Если Login / Logout уже имеет location,
        * используем его.
@@ -324,19 +571,34 @@ export const parseDriverHtml = (html: string): ParsedDriverHtml => {
        * Login  -> ищем ниже
        */
       let location = status.location;
+      let locationUnavailableReason: "range-start" | "range-end" | undefined;
 
       if (!location) {
-        location =
-          type === "logout"
-            ? findLocationBefore(index)
-            : findLocationAfter(index);
+        if (type === "logout") {
+          location = findLocationBefore(index);
+
+          if (!location) {
+            locationUnavailableReason = "range-start";
+          }
+        } else {
+          location = findLocationAfter(index);
+
+          if (!location) {
+            locationUnavailableReason = "range-end";
+          }
+        }
       }
+
+      const changeTruck = hasNearbyChangeTruck(index, type, status.odometer);
 
       return {
         ...status,
         type,
         event: type === "login" ? "Login" : "Logout",
         location,
+        locationUnavailableReason,
+        hasChangeTruck: changeTruck,
+        coDriverEvents,
       };
     })
     .filter((event): event is DriverEvent => event !== null);

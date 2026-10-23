@@ -6,6 +6,8 @@ export type ComparisonState = "match" | "mismatch" | "neutral";
 
 export type DriverSide = "left" | "right";
 
+export type LocationUnavailableReason = "range-start" | "range-end";
+
 export interface RawStatus {
   originalIndex: number;
   time: string;
@@ -15,9 +17,17 @@ export interface RawStatus {
   notes: string;
 }
 
+export interface CoDriverEvent {
+  action: "drop" | "pickup";
+  dateTime: string;
+}
+
 export interface DriverEvent extends RawStatus {
   type: DriverEventType;
   event: DriverEventLabel;
+  hasChangeTruck?: boolean;
+  locationUnavailableReason?: LocationUnavailableReason;
+  coDriverEvents?: CoDriverEvent[];
 }
 
 export interface ParsedDriverHtml {

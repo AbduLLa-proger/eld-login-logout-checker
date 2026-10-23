@@ -17,10 +17,29 @@ export interface RenderTargets {
 
 const DRIVER_NAMES = ["First Driver", "Second Driver", "Third Driver"];
 
+const getLocationLabel = (event: DriverEvent): string => {
+  if (event.location) {
+    return event.location;
+  }
+
+  if (event.locationUnavailableReason === "range-start") {
+    return "Локация вне 8-дневного периода";
+  }
+
+  if (event.locationUnavailableReason === "range-end") {
+    return "Локация недоступна — конец текущего периода";
+  }
+
+  return "Локация не найдена";
+};
+
 const renderEvent = (event: DriverEvent | null): string => {
   if (!event) {
     return '<span class="empty-cell">—</span>';
   }
+
+  const hasFlags =
+    event.hasChangeTruck || Boolean(event.coDriverEvents?.length);
 
   return `
     <div class="event-card">
@@ -33,7 +52,7 @@ const renderEvent = (event: DriverEvent | null): string => {
       </div>
 
       <div class="event-location">
-        ${escapeHtml(event.location || "Location not found")}
+        ${escapeHtml(getLocationLabel(event))}
       </div>
 
       <div class="event-odo">
@@ -42,10 +61,55 @@ const renderEvent = (event: DriverEvent | null): string => {
           ${event.odometer ?? "—"}
         </strong>
       </div>
+
+      ${
+        hasFlags
+          ? `
+            <div class="event-flags">
+              ${
+                event.hasChangeTruck
+                  ? `
+                    <span class="event-change-truck">
+                      🚚 Change truck
+                    </span>
+                  `
+                  : ""
+              }
+
+              ${
+                event.coDriverEvents
+                  ?.map(
+                    (coDriverEvent) => `
+                    <span
+                      class="${
+                        coDriverEvent.action === "drop"
+                          ? "event-drop-co-driver"
+                          : "event-pickup-co-driver"
+                      }"
+                    >
+                    <span>
+                      👤 ${
+                        coDriverEvent.action === "drop"
+                          ? "Drop Co Driver"
+                          : "Pick Co Driver"
+                      }
+                    </span>
+
+                    <span class="event-co-driver-time">
+                      ${escapeHtml(coDriverEvent.dateTime)}
+                    </span>
+                  </span>
+                  `,
+                  )
+                  .join("") ?? ""
+              }
+            </div>
+          `
+          : ""
+      }
     </div>
   `;
 };
-
 const renderResult = (row: ComparisonRow): string => {
   const symbols: Record<ComparisonState, string> = {
     match: "✓",

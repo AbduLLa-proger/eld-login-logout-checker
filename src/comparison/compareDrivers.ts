@@ -47,6 +47,50 @@ const findRelogIndexes = (group: DriverEvent[]): Set<number> => {
   return neutral;
 };
 
+const getSameDriverAlternatingPairs = (
+  bucket: IndexedDriverEvent[],
+  driverCount: number,
+): Array<[number, number]> => {
+  const pairs: Array<[number, number]> = [];
+
+  for (let driverIndex = 0; driverIndex < driverCount; driverIndex += 1) {
+    const driverEntries = bucket
+      .map((entry, bucketIndex) => ({
+        entry,
+        bucketIndex,
+      }))
+      .filter(({ entry }) => entry.driverIndex === driverIndex)
+      .sort(
+        (a, b) => a.entry.event.originalIndex - b.entry.event.originalIndex,
+      );
+
+    for (let i = 0; i < driverEntries.length - 1; i += 1) {
+      const current = driverEntries[i];
+      const next = driverEntries[i + 1];
+
+      if (!current || !next) {
+        continue;
+      }
+
+      /*
+       * Login -> Logout
+       * или
+       * Logout -> Login
+       *
+       * у одного водителя с тем же odometer.
+       */
+      if (
+        current.entry.event.odometer === next.entry.event.odometer &&
+        current.entry.event.type !== next.entry.event.type
+      ) {
+        pairs.push([current.bucketIndex, next.bucketIndex]);
+      }
+    }
+  }
+
+  return pairs;
+};
+
 export const compareDrivers = (drivers: DriverEvent[][]): DriverComparison => {
   const driverCount = drivers.length;
 
@@ -165,7 +209,7 @@ export const compareDrivers = (drivers: DriverEvent[][]): DriverComparison => {
         reason = "Начало 8-day window";
       } else if (relogIndexes.has(index)) {
         state = "neutral";
-        reason = "Same-driver Logout → Login с тем же odometer";
+        reason = "Login/Logout одного водителя с тем же odometer";
       }
 
       output.push({
@@ -248,11 +292,52 @@ export const compareDrivers = (drivers: DriverEvent[][]): DriverComparison => {
        * Тогда Driver 1 будет сопоставлен
        * именно с Driver 3.
        */
-      const perfectCandidate = candidates.find(
+      const perfectCandidates = candidates.filter(
         ({ entry }) => comparePair(source.event, entry.event).state === "match",
       );
 
-      const selected = perfectCandidate ?? candidates[0];
+      const candidatePool =
+        perfectCandidates.length > 0 ? perfectCandidates : candidates;
+
+      const sourceTimestamp = getEventTimelineTimestamp(
+        source.event,
+        crossesNewYear,
+      );
+
+      const selected = candidatePool.reduce(
+        (best, candidate) => {
+          if (!best) {
+            return candidate;
+          }
+
+          const candidateTimestamp = getEventTimelineTimestamp(
+            candidate.entry.event,
+            crossesNewYear,
+          );
+
+          const bestTimestamp = getEventTimelineTimestamp(
+            best.entry.event,
+            crossesNewYear,
+          );
+
+          if (sourceTimestamp == null || candidateTimestamp == null) {
+            return best;
+          }
+
+          if (bestTimestamp == null) {
+            return candidate;
+          }
+
+          const candidateDistance = Math.abs(
+            sourceTimestamp - candidateTimestamp,
+          );
+
+          const bestDistance = Math.abs(sourceTimestamp - bestTimestamp);
+
+          return candidateDistance < bestDistance ? candidate : best;
+        },
+        undefined as (typeof candidatePool)[number] | undefined,
+      );
 
       if (!selected) {
         continue;
@@ -285,7 +370,44 @@ export const compareDrivers = (drivers: DriverEvent[][]): DriverComparison => {
       }))
       .filter(({ index }) => !used.has(index));
 
+    const sameDriverPairs = getSameDriverAlternatingPairs(bucket, driverCount);
+
+    const remainingIndexes = new Set(remaining.map(({ index }) => index));
+
+    const neutralBucketIndexes = new Set<number>();
+
+    for (const [firstIndex, secondIndex] of sameDriverPairs) {
+      /*
+       * Same-driver исключение применяем только если
+       * ОБА события ещё не использованы в настоящей
+       * паре между разными водителями.
+       */
+      if (
+        remainingIndexes.has(firstIndex) &&
+        remainingIndexes.has(secondIndex)
+      ) {
+        neutralBucketIndexes.add(firstIndex);
+        neutralBucketIndexes.add(secondIndex);
+      }
+    }
+
     const remainingUsed = new Set<number>();
+
+    remaining.forEach(({ entry, index }, remainingIndex) => {
+      if (!neutralBucketIndexes.has(index)) {
+        return;
+      }
+
+      remainingUsed.add(remainingIndex);
+
+      output.push({
+        events: createEventsForRow(driverCount, [entry]),
+        state: "neutral",
+        reason: "Login/Logout одного водителя с тем же odometer — допустимо",
+        odometer,
+        order: entry.event.originalIndex,
+      });
+    });
 
     /*
      * Если у двух разных водителей
@@ -426,17 +548,10 @@ export const compareDrivers = (drivers: DriverEvent[][]): DriverComparison => {
      */
     const eventsBetween = allIndexedEvents
       .filter(({ event }) => {
-        /*
-         * Не считаем события самой пары.
-         */
         if (event === first || event === second) {
           return false;
         }
 
-        /*
-         * По твоему правилу интересуют
-         * события именно с odometer.
-         */
         if (event.odometer == null) {
           return false;
         }

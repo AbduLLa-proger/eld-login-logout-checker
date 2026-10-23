@@ -26,7 +26,14 @@ export const comparePair = (
    * Location считается ошибкой только если
    * текст отличается на 40% или больше.
    */
-  if (!locationsMatch(left.location, right.location)) {
+
+  const locationCannotBeChecked =
+    left.locationUnavailableReason != null ||
+    right.locationUnavailableReason != null;
+  if (
+    !locationCannotBeChecked &&
+    !locationsMatch(left.location, right.location)
+  ) {
     reasons.push("Location отличается");
   }
 
@@ -44,13 +51,50 @@ export const comparePair = (
     }
   }
 
-  return reasons.length
-    ? {
-        state: "mismatch",
-        reason: reasons.join(" · "),
-      }
-    : {
+  if (reasons.length) {
+    const hasChangeTruck =
+      left.hasChangeTruck === true || right.hasChangeTruck === true;
+
+    if (hasChangeTruck) {
+      return {
         state: "match",
-        reason: "Совпадает",
+        reason: "Допустимо — Change truck",
       };
+    }
+
+    return {
+      state: "mismatch",
+      reason: reasons.join(" · "),
+    };
+  }
+
+  if (locationCannotBeChecked) {
+    const hasRangeStart =
+      left.locationUnavailableReason === "range-start" ||
+      right.locationUnavailableReason === "range-start";
+
+    const hasRangeEnd =
+      left.locationUnavailableReason === "range-end" ||
+      right.locationUnavailableReason === "range-end";
+
+    if (hasRangeStart) {
+      return {
+        state: "match",
+        reason: "Совпадает · Локация находится вне диапазона заданного периода",
+      };
+    }
+
+    if (hasRangeEnd) {
+      return {
+        state: "match",
+        reason:
+          "Совпадает · Location не проверена: Login является последним событием диапазона",
+      };
+    }
+  }
+
+  return {
+    state: "match",
+    reason: "Совпадает",
+  };
 };
