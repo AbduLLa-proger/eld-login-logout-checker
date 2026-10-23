@@ -483,26 +483,36 @@ export const parseDriverHtml = (html: string): ParsedDriverHtml => {
     type: DriverEvent["type"],
     odometer: number | null,
   ): boolean => {
-    if (odometer == null) {
-      return false;
-    }
-
     const currentStatus = statuses[index];
 
     if (!currentStatus) {
       return false;
     }
 
-    // change truck прямо на Login / Logout
-    if (
-      currentStatus.odometer === odometer &&
-      hasChangeTruckText(currentStatus.notes)
-    ) {
+    /*
+     * Change Truck находится прямо
+     * на Login / Logout.
+     *
+     * Здесь odometer вообще не нужен:
+     * если на самой строке есть текст
+     * или truck-fast icon — этого достаточно.
+     */
+    if (hasChangeTruck(currentStatus)) {
       return true;
     }
 
-    // Login -> ищем после
-    // Logout -> ищем перед
+    /*
+     * Для поиска Change Truck на соседнем
+     * статусе нужен odometer.
+     */
+    if (odometer == null) {
+      return false;
+    }
+
+    /*
+     * Login  -> ищем ПОСЛЕ.
+     * Logout -> ищем ПЕРЕД.
+     */
     const direction = type === "login" ? 1 : -1;
 
     const MAX_DISTANCE = 3;
@@ -514,12 +524,15 @@ export const parseDriverHtml = (html: string): ParsedDriverHtml => {
         break;
       }
 
-      // Другой Login / Logout = уже другая группа
+      /*
+       * Следующий Login / Logout означает,
+       * что началась уже другая auth-группа.
+       */
       if (getEventType(status.event)) {
         break;
       }
 
-      if (status.odometer === odometer && hasChangeTruckText(status.notes)) {
+      if (status.odometer === odometer && hasChangeTruck(status)) {
         return true;
       }
     }
