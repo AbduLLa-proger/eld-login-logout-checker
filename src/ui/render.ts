@@ -39,7 +39,9 @@ const renderEvent = (event: DriverEvent | null): string => {
   }
 
   const hasFlags =
-    event.hasChangeTruck || Boolean(event.coDriverEvents?.length);
+    event.hasChangeTruck ||
+    event.nextLoginHasChangeTruck ||
+    Boolean(event.coDriverEvents?.length);
 
   return `
     <div class="event-card">
@@ -76,6 +78,16 @@ const renderEvent = (event: DriverEvent | null): string => {
                   : ""
               }
 
+              ${
+                event.nextLoginHasChangeTruck
+                  ? `
+                    <span class="event-change-truck-related">
+                      🚚 Change truck на следующем Login
+                    </span>
+                  `
+                  : ""
+              }
+                  
               ${
                 event.coDriverEvents
                   ?.map(
@@ -115,6 +127,7 @@ const renderResult = (row: ComparisonRow): string => {
     match: "✓",
     mismatch: "×",
     neutral: "•",
+    allowed: "!",
   };
 
   const warningSeparator = " · ⚠ ";
@@ -124,9 +137,13 @@ const renderResult = (row: ComparisonRow): string => {
   const warning =
     warningParts.length > 0 ? warningParts.join(warningSeparator) : null;
 
+  const hasDotInspection = row.events.some(
+    (event) => event?.hasDotInspection === true,
+  );
+
   return `
     <div
-      class="result-wrap"
+      class="result-wrap ${row.state}"
       title="${escapeHtml(row.reason)}"
     >
       <span class="result-icon ${row.state}">
@@ -136,6 +153,16 @@ const renderResult = (row: ComparisonRow): string => {
       <div class="result-reason">
         ${escapeHtml(reason ?? row.reason)}
       </div>
+
+      ${
+        hasDotInspection
+          ? `
+      <div class="result-dot-inspection">
+        👮 DOT inspection
+      </div>
+    `
+          : ""
+      }
 
       ${
         warning
@@ -196,6 +223,7 @@ export const renderComparison = (
       match: 0,
       mismatch: 0,
       neutral: 0,
+      allowed: 0,
     },
   );
 

@@ -2,7 +2,7 @@ export type DriverEventType = "login" | "logout";
 
 export type DriverEventLabel = "Login" | "Logout";
 
-export type ComparisonState = "match" | "mismatch" | "neutral";
+export type ComparisonState = "match" | "mismatch" | "neutral" | "allowed";
 
 export type DriverSide = "left" | "right";
 
@@ -15,6 +15,7 @@ export interface RawStatus {
   location: string;
   odometer: number | null;
   notes: string;
+  hasDotInspection?: boolean;
 }
 
 export interface CoDriverEvent {
@@ -28,6 +29,7 @@ export interface DriverEvent extends RawStatus {
   hasChangeTruck?: boolean;
   locationUnavailableReason?: LocationUnavailableReason;
   coDriverEvents?: CoDriverEvent[];
+  nextLoginHasChangeTruck?: boolean;
 }
 
 export interface ParsedDriverHtml {
@@ -42,7 +44,7 @@ export interface ParsedFlowTime {
 }
 
 export interface PairResult {
-  state: Extract<ComparisonState, "match" | "mismatch">;
+  state: "match" | "mismatch" | "allowed";
   reason: string;
 }
 

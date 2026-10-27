@@ -65,6 +65,44 @@ const hasCoDriverAction = (
       ) ?? false,
   );
 
+const applyChangeTruckException = (
+  events: Array<DriverEvent | null>,
+  state: ComparisonRow["state"],
+  reason: string,
+): {
+  state: ComparisonRow["state"];
+  reason: string;
+} => {
+  if (state !== "mismatch") {
+    return {
+      state,
+      reason,
+    };
+  }
+
+  const hasDirectChangeTruck = events.some(
+    (event) => event?.hasChangeTruck === true,
+  );
+
+  const hasNextLoginChangeTruck = events.some(
+    (event) => event?.nextLoginHasChangeTruck === true,
+  );
+
+  if (!hasDirectChangeTruck && !hasNextLoginChangeTruck) {
+    return {
+      state,
+      reason,
+    };
+  }
+
+  return {
+    state: "allowed",
+    reason: hasNextLoginChangeTruck
+      ? "Допустимо — Change truck на следующем Login"
+      : "Допустимо — Change truck",
+  };
+};
+
 /*
  * Это не означает, что пара полностью правильная.
  *
@@ -433,7 +471,13 @@ export const compareTwoDriversSequentially = (
       driverIndex === 1 ? event : null,
     );
 
-    const result = applyCoDriverState(events, state, reason);
+    const changeTruckResult = applyChangeTruckException(events, state, reason);
+
+    const result = applyCoDriverState(
+      events,
+      changeTruckResult.state,
+      changeTruckResult.reason,
+    );
 
     rows.push({
       events,
@@ -462,10 +506,16 @@ export const compareTwoDriversSequentially = (
 
     const events = createRowEvents(first, second);
 
-    const result = applyCoDriverState(
+    const changeTruckResult = applyChangeTruckException(
       events,
       pairResult.state,
       pairResult.reason,
+    );
+
+    const result = applyCoDriverState(
+      events,
+      changeTruckResult.state,
+      changeTruckResult.reason,
     );
 
     rows.push({

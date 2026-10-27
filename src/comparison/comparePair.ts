@@ -13,8 +13,19 @@ export const comparePair = (
   right: DriverEvent,
 ): PairResult => {
   const reasons: string[] = [];
+  const sameType = left.type === right.type;
+  const sameOdometer =
+    left.odometer != null &&
+    right.odometer != null &&
+    left.odometer === right.odometer;
 
-  if (!isComplementary(left, right)) {
+  if (sameType && sameOdometer) {
+    reasons.push(
+      left.type === "logout"
+        ? "Два Logout — нет Login"
+        : "Два Login — нет Logout",
+    );
+  } else if (!isComplementary(left, right)) {
     reasons.push("Login/Logout pair не сходится");
   }
 
@@ -31,6 +42,7 @@ export const comparePair = (
     left.locationUnavailableReason != null ||
     right.locationUnavailableReason != null;
   if (
+    isComplementary(left, right) &&
     !locationCannotBeChecked &&
     !locationsMatch(left.location, right.location)
   ) {
@@ -52,12 +64,15 @@ export const comparePair = (
   }
 
   if (reasons.length) {
-    const hasChangeTruck =
-      left.hasChangeTruck === true || right.hasChangeTruck === true;
+    const hasChangeTruckException =
+      left.hasChangeTruck === true ||
+      right.hasChangeTruck === true ||
+      left.nextLoginHasChangeTruck === true ||
+      right.nextLoginHasChangeTruck === true;
 
-    if (hasChangeTruck) {
+    if (hasChangeTruckException) {
       return {
-        state: "match",
+        state: "allowed",
         reason: "Допустимо — Change truck",
       };
     }

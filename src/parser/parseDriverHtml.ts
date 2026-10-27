@@ -355,12 +355,17 @@ export const parseDriverHtml = (html: string): ParsedDriverHtml => {
   const statuses: Array<
     RawStatus & {
       hasChangeTruckIcon: boolean;
+      hasDotInspectionIcon: boolean;
     }
   > = rowNodes.map((row, originalIndex) => {
     const cells = [...row.children];
 
     const hasChangeTruckIcon = Boolean(
       row.querySelector('img[src*="truck-fast_black"]'),
+    );
+
+    const hasDotInspectionIcon = Boolean(
+      row.querySelector('img[src*="police.png"]'),
     );
 
     return {
@@ -371,8 +376,29 @@ export const parseDriverHtml = (html: string): ParsedDriverHtml => {
       odometer: getOdometer(cells),
       notes: getNotes(cells),
       hasChangeTruckIcon,
+      hasDotInspectionIcon,
     };
   });
+
+  const hasDotInspectionForAuthEvent = (index: number): boolean => {
+    for (let i = index; i < statuses.length; i += 1) {
+      const status = statuses[i];
+
+      if (!status) {
+        continue;
+      }
+
+      if (i !== index && getEventType(status.event)) {
+        break;
+      }
+
+      if (status.hasDotInspectionIcon) {
+        return true;
+      }
+    }
+
+    return false;
+  };
 
   const hasChangeTruck = (
     status: RawStatus & {
@@ -540,6 +566,22 @@ export const parseDriverHtml = (html: string): ParsedDriverHtml => {
     return false;
   };
 
+  const findNextAuthIndex = (index: number): number | null => {
+    for (let i = index + 1; i < statuses.length; i += 1) {
+      const status = statuses[i];
+
+      if (!status) {
+        continue;
+      }
+
+      if (getEventType(status.event)) {
+        return i;
+      }
+    }
+
+    return null;
+  };
+
   const findLocationBefore = (index: number): string => {
     for (let i = index - 1; i >= 0; i -= 1) {
       const status = statuses[i];
@@ -572,6 +614,7 @@ export const parseDriverHtml = (html: string): ParsedDriverHtml => {
         return null;
       }
 
+      const hasDotInspection = hasDotInspectionForAuthEvent(index);
       const coDriverEvents = coDriverEventsByAuthIndex.get(index) ?? [];
 
       /*
@@ -604,6 +647,28 @@ export const parseDriverHtml = (html: string): ParsedDriverHtml => {
 
       const changeTruck = hasNearbyChangeTruck(index, type, status.odometer);
 
+      let nextLoginHasChangeTruck = false;
+
+      if (type === "logout" && !changeTruck) {
+        const nextAuthIndex = findNextAuthIndex(index);
+
+        if (nextAuthIndex !== null) {
+          const nextStatus = statuses[nextAuthIndex];
+
+          if (nextStatus) {
+            const nextType = getEventType(nextStatus.event);
+
+            if (nextType === "login") {
+              nextLoginHasChangeTruck = hasNearbyChangeTruck(
+                nextAuthIndex,
+                "login",
+                nextStatus.odometer,
+              );
+            }
+          }
+        }
+      }
+
       return {
         ...status,
         type,
@@ -611,7 +676,9 @@ export const parseDriverHtml = (html: string): ParsedDriverHtml => {
         location,
         locationUnavailableReason,
         hasChangeTruck: changeTruck,
+        nextLoginHasChangeTruck,
         coDriverEvents,
+        hasDotInspection,
       };
     })
     .filter((event): event is DriverEvent => event !== null);

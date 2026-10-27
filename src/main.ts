@@ -4,6 +4,7 @@ import { compareDrivers } from "./comparison/compareDrivers";
 import { parseDriverHtml } from "./parser/parseDriverHtml";
 import { getElement } from "./ui/dom";
 import { renderComparison } from "./ui/render";
+import { APP_VERSION } from "./config/version";
 
 type Theme = "light" | "dark";
 
@@ -42,6 +43,12 @@ const matchedCount = getElement<HTMLElement>("#matchedCount");
 const mismatchCount = getElement<HTMLElement>("#mismatchCount");
 
 const ignoredCount = getElement<HTMLElement>("#ignoredCount");
+
+const versionElement = document.querySelector<HTMLElement>("#app-version");
+
+if (versionElement) {
+  versionElement.textContent = `ELD Checker v${APP_VERSION}`;
+}
 
 let thirdDriverEnabled = false;
 
