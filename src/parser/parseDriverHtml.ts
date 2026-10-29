@@ -323,16 +323,26 @@ const getOdometer = (cells: Element[]): number | null => {
   return parseFirstOdometer(textOf(odometerCell));
 };
 
+const cleanNotesText = (value: string): string => {
+  return cleanText(value)
+    .replace(/more_vert/gi, " ")
+    .replace(/more_horiz/gi, " ")
+    .replace(/content_copy/gi, " ")
+    .replace(/edit/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+};
+
 const getNotes = (cells: Element[]): string => {
   if (isNewStructure(cells)) {
     // NEW HTML
     // 9 = notes
-    return textOf(cells[9]);
+    return cleanNotesText(textOf(cells[9]));
   }
 
   // OLD HTML
   // 7 = notes
-  return textOf(cells[7]);
+  return cleanNotesText(textOf(cells[7]));
 };
 
 export const parseDriverHtml = (html: string): ParsedDriverHtml => {
@@ -474,17 +484,20 @@ export const parseDriverHtml = (html: string): ParsedDriverHtml => {
   statuses.forEach((status, index) => {
     const action = getCoDriverAction(status.notes);
 
+    if (/co[\s-]*driver/i.test(status.notes)) {
+      console.log("CO DRIVER DEBUG", {
+        index,
+        time: status.time,
+        event: status.event,
+        notes: status.notes,
+        action,
+      });
+    }
+
     if (!action) {
       return;
     }
 
-    /*
-     * DROP CO DRIVER:
-     * прикрепляем к Login, который был ДО него.
-     *
-     * PICK CO DRIVER:
-     * прикрепляем к Logout, который идёт ПОСЛЕ него.
-     */
     const authIndex =
       action === "drop"
         ? findPreviousLoginIndex(index)
