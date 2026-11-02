@@ -4,7 +4,7 @@ import type {
   DriverEvent,
   PairResult,
 } from "../types";
-import { comparePair } from "./comparePair";
+import { comparePair, isComplementary } from "./comparePair";
 
 type AlignmentMove = "pair" | "first-only" | "second-only";
 
@@ -541,6 +541,38 @@ export const compareTwoDriversSequentially = (
 
       const secondIndex = pendingSecondIndexes[secondPointer];
 
+      /*
+       * Если у обоих водителей здесь есть
+       * противоположные auth events:
+       *
+       * Logout <-> Login
+       *
+       * сначала сравниваем их между собой,
+       * даже если odometer отличается.
+       *
+       * Это позволяет comparePair() показать
+       * конкретную ошибку "Odometer отличается".
+       *
+       * Cross-driver pair имеет приоритет
+       * над same-driver re-login/re-logout.
+       */
+      if (firstIndex != null && secondIndex != null) {
+        const firstEvent = firstEvents[firstIndex];
+        const secondEvent = secondEvents[secondIndex];
+
+        if (
+          firstEvent &&
+          secondEvent &&
+          isComplementary(firstEvent, secondEvent)
+        ) {
+          pushPair(firstIndex, secondIndex);
+
+          firstPointer += 1;
+          secondPointer += 1;
+
+          continue;
+        }
+      }
       /*
        * Same-driver re-login/re-logout
        * не превращаем в ошибочную пару.
