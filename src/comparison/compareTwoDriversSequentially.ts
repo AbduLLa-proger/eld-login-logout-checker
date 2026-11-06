@@ -294,21 +294,26 @@ const findSameDriverAlternatingIndexes = (
   const neutralIndexes = new Set<number>();
 
   for (let i = 0; i < events.length - 1; i += 1) {
-    const current = events[i];
-    const next = events[i + 1];
+    const logout = events[i];
+    const login = events[i + 1];
 
-    if (!current || !next) {
+    if (!logout || !login) {
       continue;
     }
 
-    if (
-      current.odometer != null &&
-      current.odometer === next.odometer &&
-      current.type !== next.type
-    ) {
-      neutralIndexes.add(i);
-      neutralIndexes.add(i + 1);
+    const isSameDriverRelog =
+      logout.type === "logout" &&
+      login.type === "login" &&
+      logout.odometer != null &&
+      login.odometer != null &&
+      logout.odometer === login.odometer;
+
+    if (!isSameDriverRelog) {
+      continue;
     }
+
+    neutralIndexes.add(i);
+    neutralIndexes.add(i + 1);
   }
 
   return neutralIndexes;
@@ -447,7 +452,10 @@ export const compareTwoDriversSequentially = (
       driverIndex === 0 ? firstRelogIndexes : secondRelogIndexes;
 
     let state: ComparisonRow["state"] = "mismatch";
-    let reason = "Лишний Login/Logout: нарушает последовательную цепочку";
+    let reason =
+      event.type === "login"
+        ? "У Login отсутствует Logout"
+        : "У Logout отсутствует Login";
 
     if (event.odometer == null) {
       state = "mismatch";

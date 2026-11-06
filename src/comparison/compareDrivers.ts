@@ -28,40 +28,29 @@ const findRelogIndexes = (group: DriverEvent[]): Set<number> => {
   const neutral = new Set<number>();
 
   for (let i = 0; i < group.length - 1; i += 1) {
-    const current = group[i];
-    const next = group[i + 1];
+    const logout = group[i];
+    const login = group[i + 1];
 
-    if (!current || !next) {
+    if (!logout || !login) {
       continue;
     }
 
-    /*
-     * Один и тот же водитель может иметь:
-     *
-     * Logout -> Login
-     * или
-     * Login -> Logout
-     *
-     * с одинаковым odometer.
-     *
-     * В обоих случаях это допустимо.
-     */
-    if (
-      current.odometer != null &&
-      next.odometer != null &&
-      current.odometer === next.odometer &&
-      current.type !== next.type
-    ) {
-      neutral.add(i);
-      neutral.add(i + 1);
+    const isSameDriverRelog =
+      logout.type === "logout" &&
+      login.type === "login" &&
+      logout.odometer != null &&
+      login.odometer != null &&
+      logout.odometer === login.odometer;
 
-      /*
-       * Эти два события уже образуют пару,
-       * поэтому следующее событие начинаем
-       * проверять отдельно.
-       */
-      i += 1;
+    if (!isSameDriverRelog) {
+      continue;
     }
+
+    neutral.add(i);
+    neutral.add(i + 1);
+
+    // Эта пара уже обработана.
+    i += 1;
   }
 
   return neutral;
@@ -92,19 +81,24 @@ const getSameDriverAlternatingPairs = (
         continue;
       }
 
-      /*
-       * Login -> Logout
-       * или
-       * Logout -> Login
-       *
-       * у одного водителя с тем же odometer.
-       */
-      if (
-        current.entry.event.odometer === next.entry.event.odometer &&
-        current.entry.event.type !== next.entry.event.type
-      ) {
-        pairs.push([current.bucketIndex, next.bucketIndex]);
+      const logout = current.entry.event;
+      const login = next.entry.event;
+
+      const isSameDriverRelog =
+        logout.type === "logout" &&
+        login.type === "login" &&
+        logout.odometer != null &&
+        login.odometer != null &&
+        logout.odometer === login.odometer;
+
+      if (!isSameDriverRelog) {
+        continue;
       }
+
+      pairs.push([current.bucketIndex, next.bucketIndex]);
+
+      // Пару Logout → Login второй раз не используем.
+      i += 1;
     }
   }
 
@@ -218,8 +212,10 @@ export const compareDrivers = (drivers: DriverEvent[][]): DriverComparison => {
 
     group.forEach((event, index) => {
       let state: ComparisonRow["state"] = "mismatch";
-
-      let reason = "Нет соответствующего события у другого водителя";
+      let reason =
+        event.type === "login"
+          ? "У Login отсутствует Logout"
+          : "У Logout отсутствует Login";
 
       if (firstSharedOdometer == null) {
         state = "neutral";
